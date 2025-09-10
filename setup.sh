@@ -1,38 +1,55 @@
 #!/bin/bash
 
+# Make self executable (optional safety)
+SCRIPT_PATH="$(realpath "$0")"
+chmod +x "$SCRIPT_PATH"
+
+# Exit on error
 set -e
 
-# Detect user
+# Get current user and path
 USER_NAME=$(whoami)
-INSTALL_PATH="/home/$USER_NAME/tmate-auto"  # adjust if you clone elsewhere
+INSTALL_PATH=$(pwd)
 
-# Install packages
-sudo apt-get update && \
+echo "📦 Installing dependencies..."
+sudo apt-get update
 sudo apt-get install -y tmate tzdata expect ufw
 
-# Set timezone
+echo "🌐 Setting timezone to Asia/Kathmandu..."
 sudo ln -fs /usr/share/zoneinfo/Asia/Kathmandu /etc/localtime
 sudo dpkg-reconfigure -f noninteractive tzdata
 
-# Open ports
+echo "🔓 Opening ports 8444 and 443..."
 sudo ufw allow 8444/tcp
 sudo ufw allow 443/tcp
 sudo ufw reload
 
-# Make start.sh executable
+echo "🧹 Making start.sh executable..."
 chmod +x "$INSTALL_PATH/start.sh"
 
-# Copy systemd service and set correct paths
-SERVICE_PATH="/etc/systemd/system/tmate-session.service"
-sudo cp "$INSTALL_PATH/tmate-session.service" "$SERVICE_PATH"
-sudo sed -i "s|/home/youruser/tmate-auto|$INSTALL_PATH|g" "$SERVICE_PATH"
-sudo sed -i "s|User=youruser|User=$USER_NAME|g" "$SERVICE_PATH"
+echo "⚙️ Creating systemd service for persistent tmate session..."
 
-# Reload and start service
+SERVICE_CONTENT="[Unit]
+Description=Persistent tmate session
+After=network.target
+
+[Service]
+ExecStart=$INSTALL_PATH/start.sh
+Restart=always
+User=$USER_NAME
+
+[Install]
+WantedBy=multi-user.target"
+
+echo "$SERVICE_CONTENT" | sudo tee /etc/systemd/system/tmate-session.service > /dev/null
+
+echo "🔁 Reloading and enabling tmate service..."
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable tmate-session
 sudo systemctl start tmate-session
 
-echo "✅ Setup complete. tmate session started."
-echo "ℹ️  You can check logs with: sudo journalctl -u tmate-session -f"
+echo ""
+echo "✅ All done!"
+echo "📜 To check logs: sudo journalctl -u tmate-session -f"
+echo "🚀 tmate session is now running as a background service."
